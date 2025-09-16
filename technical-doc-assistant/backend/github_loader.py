@@ -27,7 +27,7 @@ def load_github_repo(repo_url: str, local_path: str = "temp_repo") -> List[dict]
 
     try:
         print(f"Cloning repository from {repo_url}...")
-        Repo.clone_from(repo_url, local_path)
+        Repo.clone_from(repo_url, local_path, depth=1)
         print("Repository cloned successfully.")
         
         documents = []
