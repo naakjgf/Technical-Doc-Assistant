@@ -39,18 +39,39 @@ app.add_middleware(
 # --- Production-Ready Redis Connection ---
 redis_client = None
 try:
-    redis_url = os.getenv("REDIS_URL")
-    if redis_url:
-        redis_client = redis.from_url(redis_url, decode_responses=True)
-        print("Successfully connected to managed Redis.")
+    # PRIORITY 1: Look for individual Railway/production variables. This is the most reliable.
+    redis_host = os.getenv("REDISHOST")
+    redis_port = os.getenv("REDISPORT")
+    redis_password = os.getenv("REDISPASSWORD")
+
+    if redis_host and redis_port and redis_password:
+        redis_client = redis.Redis(
+            host=redis_host,
+            port=int(redis_port),
+            password=redis_password,
+            decode_responses=True
+        )
+        print("Successfully connected to managed Redis using component variables.")
+    
+    # PRIORITY 2: Fallback to the full REDIS_URL if the above aren't present.
+    elif os.getenv("REDIS_URL"):
+        redis_client = redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+        print("Successfully connected to managed Redis using REDIS_URL.")
+    
+    # PRIORITY 3: Fallback for local development using docker-compose.
     else:
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", 6379))
-        redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        local_redis_host = os.getenv("REDIS_HOST", "localhost")
+        local_redis_port = int(os.getenv("REDIS_PORT", 6379))
+        redis_client = redis.Redis(host=local_redis_host, port=local_redis_port, decode_responses=True)
         print("Successfully connected to local Redis.")
+
     redis_client.ping()
+
 except redis.exceptions.ConnectionError as e:
-    print(f"Could not connect to Redis: {e}")
+    print(f"FATAL: Could not connect to Redis: {e}")
+    redis_client = None
+except Exception as e:
+    print(f"An unexpected error occurred during Redis connection: {e}")
     redis_client = None
 
 # --- Pydantic Models ---
