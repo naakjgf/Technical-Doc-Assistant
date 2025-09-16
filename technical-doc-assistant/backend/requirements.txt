@@ -5,6 +5,8 @@ redis
 python-dotenv
 python-multipart
 GitPython
-pinecone
+pinecone-client
 langchain
 openai
+tiktoken
+gunicorn
