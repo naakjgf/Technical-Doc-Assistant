@@ -2,30 +2,26 @@
 FROM python:3.11-slim
 
 # Install git, which is a dependency for the GitPython library
-# apt-get update refreshes the package lists
-# -y automatically confirms the installation
 RUN apt-get update && apt-get install -y git
 
-# --- THE FIX ---
-# This environment variable tells Git to never prompt for credentials.
-# If credentials are required, it will fail immediately instead of hanging.
-# This is essential for running in non-interactive environments like Docker.
+# Set the environment variable to prevent git from prompting for credentials
 ENV GIT_TERMINAL_PROMPT=0
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file into the container at /app
-COPY backend/requirements.txt .
+# --- THE FIX: COPY ALL CODE FIRST ---
+# Copy the entire backend directory into the container's working directory
+COPY ./backend .
 
-# Install any needed packages specified in requirements.txt
+# --- THEN, INSTALL DEPENDENCIES ---
+# Now that the requirements.txt file is in place, install the packages.
+# This ensures that executables like 'gunicorn' are not overwritten.
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of your application code into the container at /app
-COPY backend/ .
 
 # Expose port 8000 to the outside world
 EXPOSE 8000
 
-# Command to run the application using uvicorn
+# --- THE FINAL, PRODUCTION-GRADE COMMAND ---
+# Use Gunicorn with Uvicorn workers to run the application
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000"]
