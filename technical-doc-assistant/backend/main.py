@@ -49,7 +49,8 @@ try:
             host=redis_host,
             port=int(redis_port),
             password=redis_password,
-            decode_responses=True
+            decode_responses=True,
+            ssl=True
         )
         print("Successfully connected to managed Redis using component variables.")
     
