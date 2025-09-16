@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+redis
+python-dotenv
+python-multipart
+GitPython
+pinecone
+langchain
+openai
