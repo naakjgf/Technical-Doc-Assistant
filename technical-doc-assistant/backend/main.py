@@ -6,6 +6,7 @@ import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 from github_loader import load_github_repo
 from embeddings import get_text_chunks, create_embeddings_and_upsert
@@ -38,16 +39,34 @@ redis_client = None
 try:
     redis_url = os.getenv("REDIS_URL")
     if redis_url:
-        # Use the REDIS_URL provided by Railway and add a timeout
-        redis_client = redis.from_url(
-            redis_url,
+        # Parse the Redis URL
+        parsed_url = urlparse(redis_url)
+        
+        # Extract connection details
+        hostname = parsed_url.hostname
+        port = parsed_url.port or 6379
+        password = parsed_url.password
+        username = parsed_url.username or 'default'
+        
+        # Create Redis client with explicit parameters
+        redis_client = redis.Redis(
+            host=hostname,
+            port=port,
+            username=username,
+            password=password,
             decode_responses=True,
-            socket_connect_timeout=5  # Fail fast after 5 seconds
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+            socket_keepalive_options={}
         )
-        print("Redis client configured using REDIS_URL.", flush=True)
+        print(f"Redis client configured for {hostname}:{port}", flush=True)
     else:
         # Fallback for local development
-        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        redis_client = redis.Redis(
+            host='localhost', 
+            port=6379, 
+            decode_responses=True
+        )
         print("Redis client configured for localhost.", flush=True)
 except Exception as e:
     print(f"FATAL: Could not configure Redis client: {e}", flush=True)
@@ -172,7 +191,6 @@ async def redis_health_check():
     if not redis_client:
         return {"status": "error", "message": "Redis client is not initialized."}
     try:
-        # Ping with a timeout
         ping_result = redis_client.ping()
         return {"status": "ok", "ping_response": ping_result}
     except Exception as e:
