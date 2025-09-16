@@ -136,18 +136,23 @@ def read_root():
 @app.post("/index-repo")
 async def index_repo(request: RepoIndexRequest, background_tasks: BackgroundTasks):
     """
-    Triggers the asynchronous indexing of a GitHub repository,
-    first checking if the repo has already been indexed.
+    Triggers the asynchronous indexing of a GitHub repository.
     """
-    print(f"Received request to index URL: {request.repo_url}")
+    print("--- /index-repo endpoint START ---", flush=True)
+    print(f"Received raw request to index URL: {request.repo_url}", flush=True)
     repo_id = "_".join(request.repo_url.split('/')[-2:])
+    print(f"Generated repo_id: {repo_id}", flush=True)
     
+    print("Checking if repo is already indexed...", flush=True)
     if check_if_indexed(repo_id):
-        print(f"Repo '{repo_id}' has already been indexed. Skipping.")
+        print(f"Repo '{repo_id}' has already been indexed. Skipping.", flush=True)
+        print("--- /index-repo endpoint END (Already Indexed) ---", flush=True)
         return {"status": "success", "message": f"Repository '{repo_id}' has already been indexed.", "repo_id": repo_id}
     
+    print("Repo not indexed. Adding task to background.", flush=True)
     background_tasks.add_task(process_and_embed_repo, request.repo_url, repo_id)
     
+    print("--- /index-repo endpoint END (Task Added) ---", flush=True)
     return {"status": "pending", "message": f"Repository '{repo_id}' is being indexed in the background.", "repo_id": repo_id}
 
 @app.post("/query", response_model=QueryResponse)
