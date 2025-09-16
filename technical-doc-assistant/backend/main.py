@@ -7,12 +7,6 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# --- BEFORE (Fails in Docker) ---
-# from .github_loader import load_github_repo
-# from .embeddings import get_text_chunks, create_embeddings_and_upsert
-# from .rag_engine import get_context, generate_answer
-
-# --- AFTER (Works in Docker and Locally with our setup) ---
 from github_loader import load_github_repo
 from embeddings import get_text_chunks, create_embeddings_and_upsert
 from rag_engine import get_context, generate_answer
@@ -20,10 +14,7 @@ from rag_engine import get_context, generate_answer
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- Configuration & Setup ---
-load_dotenv() # This line loads the .env file
-
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+load_dotenv()
 
 app = FastAPI(
     title="Technical Documentation Assistant API",
@@ -31,10 +22,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- NEW CORS MIDDLEWARE SETUP ---
-# This is crucial, it tells the backend to accept requests from our frontend development server.
+# --- CORS MIDDLEWARE SETUP ---
 origins = [
-    "https://technical-doc-assistant.vercel.app/",
+    "https://technical-doc-assistant.vercel.app", # <-- REMOVED a trailing slash here
     "http://localhost:3000",
 ]
 
@@ -42,14 +32,23 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"], # Allows all methods
-    allow_headers=["*"], # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
+# --- Production-Ready Redis Connection ---
+redis_client = None
 try:
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        redis_client = redis.from_url(redis_url, decode_responses=True)
+        print("Successfully connected to managed Redis.")
+    else:
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", 6379))
+        redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        print("Successfully connected to local Redis.")
     redis_client.ping()
-    print("Successfully connected to Redis.")
 except redis.exceptions.ConnectionError as e:
     print(f"Could not connect to Redis: {e}")
     redis_client = None
@@ -66,7 +65,7 @@ class QueryResponse(BaseModel):
     answer: str
     source: str
 
-# --- Caching Functions (Unchanged) ---
+# --- Caching Functions ---
 def get_cached_response(repo_id: str, question: str) -> str | None:
     if not redis_client: return None
     cache_key = f"query_cache:{repo_id}:{question}"
@@ -78,44 +77,20 @@ def set_cached_response(repo_id: str, question: str, response: dict):
     cache_key = f"query_cache:{repo_id}:{question}"
     redis_client.setex(cache_key, 3600, json.dumps(response))
 
-# --- Background Indexing Task ---
-def process_and_embed_repo(repo_url: str, repo_id: str):
-    """
-    The full pipeline function that will run in the background.
-    1. Clones repo
-    2. Chunks documents
-    3. Creates embeddings and upserts to Pinecone
-    """
-    print(f"Starting background indexing for {repo_id}...")
-    try:
-        documents = load_github_repo(repo_url)
-        if not documents:
-            print(f"No documents found or failed to load repo: {repo_id}")
-            return
-            
-        chunks = get_text_chunks(documents)
-        create_embeddings_and_upsert(chunks, repo_id)
-        print(f"Successfully finished indexing for {repo_id}.")
-    except Exception as e:
-        print(f"An error occurred during background indexing for {repo_id}: {e}")
-        
-# --- NEW HELPER FUNCTION ---
+# --- Helper Functions for Indexing Status ---
 def check_if_indexed(repo_id: str) -> bool:
-    """Checks a simple flag in Redis to see if a repo is indexed."""
-    if not redis_client:
-        return False # If redis is down, better to re-index than to fail
+    if not redis_client: return False
     return redis_client.exists(f"repo_indexed:{repo_id}")
 
 def mark_as_indexed(repo_id: str):
-    """Sets a simple flag in Redis to mark a repo as indexed."""
     if redis_client:
         redis_client.set(f"repo_indexed:{repo_id}", "true")
-        
-# --- UPDATE THE BACKGROUND TASK ---
+
+# --- THIS IS THE ONE AND ONLY CORRECT VERSION of the background task ---
 def process_and_embed_repo(repo_url: str, repo_id: str):
     """
     The full pipeline function that will run in the background.
-    Now it marks the repo as indexed upon completion.
+    It now marks the repo as indexed upon successful completion.
     """
     print(f"Starting background indexing for {repo_id}...")
     try:
@@ -127,7 +102,7 @@ def process_and_embed_repo(repo_url: str, repo_id: str):
         chunks = get_text_chunks(documents)
         create_embeddings_and_upsert(chunks, repo_id)
         
-        # --- NEW STEP: Mark as complete in Redis ---
+        # Mark as complete in Redis upon success
         mark_as_indexed(repo_id)
         print(f"Successfully finished indexing for {repo_id}. Marked as complete.")
 
@@ -142,8 +117,8 @@ def read_root():
 @app.post("/index-repo")
 async def index_repo(request: RepoIndexRequest, background_tasks: BackgroundTasks):
     """
-    Triggers the asynchronous indexing of a GitHub repository.
-    NOW CHECKS if the repo has already been indexed to save costs.
+    Triggers the asynchronous indexing of a GitHub repository,
+    first checking if the repo has already been indexed.
     """
     print(f"Received request to index URL: {request.repo_url}")
     repo_id = "_".join(request.repo_url.split('/')[-2:])
@@ -156,14 +131,11 @@ async def index_repo(request: RepoIndexRequest, background_tasks: BackgroundTask
     
     return {"status": "pending", "message": f"Repository '{repo_id}' is being indexed in the background.", "repo_id": repo_id}
 
-
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     """
-    Endpoint to ask a question about an indexed repository.
-    It checks the cache, then uses the RAG engine to generate a new answer.
+    Asks a question about an indexed repository, using a cache to store answers.
     """
-    # 1. Check cache first
     cached_answer = get_cached_response(request.repo_id, request.question)
     if cached_answer:
         print(f"Cache hit for repo '{request.repo_id}'!")
@@ -171,16 +143,12 @@ async def query(request: QueryRequest):
 
     print(f"Cache miss. Generating new response for repo '{request.repo_id}'.")
     
-    # 2. Retrieve context from Pinecone
     context = get_context(request.question, request.repo_id)
-    
     if not context:
-        raise HTTPException(status_code=404, detail="Could not retrieve context for the given repository. Ensure it has been indexed correctly.")
+        raise HTTPException(status_code=404, detail="Could not retrieve context. Please ensure the repository is indexed.")
 
-    # 3. Generate an answer using the LLM
     generated_answer = generate_answer(request.question, context)
     
-    # 4. Cache the new response
     response_data = {"answer": generated_answer}
     set_cached_response(request.repo_id, request.question, response_data)
     
