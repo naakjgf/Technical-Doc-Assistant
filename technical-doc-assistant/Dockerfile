@@ -24,4 +24,4 @@ EXPOSE 8000
 
 # --- THE FINAL, PRODUCTION-GRADE COMMAND ---
 # Use Gunicorn with Uvicorn workers to run the application
-CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000"]
+CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000", "--timeout", "300"]
