@@ -34,6 +34,7 @@ app = FastAPI(
 # --- NEW CORS MIDDLEWARE SETUP ---
 # This is crucial, it tells the backend to accept requests from our frontend development server.
 origins = [
+    "https://technical-doc-assistant.vercel.app/",
     "http://localhost:3000",
 ]
 
