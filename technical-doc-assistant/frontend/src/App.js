@@ -95,8 +95,17 @@ function App() {
     }
   };
   
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit(e);
+    }
+  };
+
   useEffect(() => {
-    addMessageToHistory("Welcome! Please start by pasting a public GitHub repository URL.", 'bot');
+      addMessageToHistory("Welcome! Please start by pasting a public GitHub repository URL.", 'bot');
+      // The line below is for the final, local version of index.js.
+      // If you are using StrictMode in index.js, this welcome message may appear twice.
   }, []);
 
   return (
@@ -110,12 +119,13 @@ function App() {
         <div ref={chatEndRef} />
       </div>
       <form onSubmit={handleSubmit} className="chat-input-form">
-        <input
-          type="text"
+        <textarea
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           placeholder={isLoading ? "Processing..." : "Enter a GitHub URL or ask a question..."}
           disabled={isLoading}
+          onKeyDown={handleKeyDown}
+          rows="1"
         />
         <button type="submit" disabled={isLoading}>Send</button>
       </form>
