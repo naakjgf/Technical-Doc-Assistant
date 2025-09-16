@@ -36,41 +36,21 @@ app.add_middleware(
 # --- Production-Ready Redis Connection ---
 redis_client = None
 try:
-    # PRIORITY 1: Look for individual Railway/production variables. This is the most reliable.
-    redis_host = os.getenv("REDISHOST")
-    redis_port = os.getenv("REDISPORT")
-    redis_password = os.getenv("REDISPASSWORD")
-
-    if redis_host and redis_port and redis_password:
-        redis_client = redis.Redis(
-            host=redis_host,
-            port=int(redis_port),
-            password=redis_password,
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        # Use the REDIS_URL provided by Railway and add a timeout
+        redis_client = redis.from_url(
+            redis_url,
             decode_responses=True,
-            ssl=True
+            socket_connect_timeout=5  # Fail fast after 5 seconds
         )
-        print("Successfully connected to managed Redis using component variables.")
-    
-    # PRIORITY 2: Fallback to the full REDIS_URL if the above aren't present.
-    elif os.getenv("REDIS_URL"):
-        redis_client = redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
-        print("Successfully connected to managed Redis using REDIS_URL.")
-    
-    # PRIORITY 3: Fallback for local development using docker-compose.
+        print("Redis client configured using REDIS_URL.", flush=True)
     else:
-        local_redis_host = os.getenv("REDIS_HOST", "localhost")
-        local_redis_port = int(os.getenv("REDIS_PORT", 6379))
-        redis_client = redis.Redis(host=local_redis_host, port=local_redis_port, decode_responses=True)
-        print("Successfully connected to local Redis.")
-
-    ##redis_client.ping()
-
-except redis.exceptions.ConnectionError as e:
-    print(f"FATAL: Could not connect to Redis: {e}")
-    redis_client = None
+        # Fallback for local development
+        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        print("Redis client configured for localhost.", flush=True)
 except Exception as e:
-    print(f"An unexpected error occurred during Redis connection: {e}")
-    redis_client = None
+    print(f"FATAL: Could not configure Redis client: {e}", flush=True)
 
 # --- Pydantic Models ---
 class RepoIndexRequest(BaseModel):
@@ -185,3 +165,18 @@ async def get_index_status(repo_id: str):
         return {"status": "complete"}
     else:
         return {"status": "pending"}
+
+@app.get("/redis-health")
+async def redis_health_check():
+    """A simple endpoint to test the Redis connection."""
+    if not redis_client:
+        return {"status": "error", "message": "Redis client is not initialized."}
+    try:
+        # Ping with a timeout
+        ping_result = redis_client.ping()
+        return {"status": "ok", "ping_response": ping_result}
+    except Exception as e:
+        print(f"--- REDIS HEALTH CHECK FAILED ---", flush=True)
+        print(f"Exception Type: {type(e).__name__}", flush=True)
+        print(f"Exception Details: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Redis connection failed: {e}")
