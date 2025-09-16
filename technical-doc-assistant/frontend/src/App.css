@@ -76,7 +76,7 @@ body {
   border-top: 1px solid #444654;
 }
 
-.chat-input-form input {
+.chat-input-form textarea {
   flex-grow: 1;
   border: none;
   background-color: #40414f;
@@ -85,9 +85,13 @@ body {
   padding: 15px;
   font-size: 1rem;
   margin-right: 10px;
+  resize: none; /* Disable manual resizing */
+  font-family: inherit; /* Use the same font as the rest of the app */
+  max-height: 200px; /* Prevent it from growing infinitely */
+  overflow-y: auto;
 }
 
-.chat-input-form input:focus {
+.chat-input-form textarea:focus {
   outline: none;
   box-shadow: 0 0 0 2px #5a5c68;
 }
@@ -112,6 +116,7 @@ body {
   opacity: 0.5;
 }
 
+/* Markdown Specific Styles */
 .message.bot code {
   background-color: #2d2f3a;
   padding: 0.2em 0.4em;
