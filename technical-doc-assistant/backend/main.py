@@ -23,10 +23,7 @@ app = FastAPI(
 )
 
 # --- CORS MIDDLEWARE SETUP ---
-origins = [
-    "https://technical-doc-assistant.vercel.app", # <-- REMOVED a trailing slash here
-    "http://localhost:3000",
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
