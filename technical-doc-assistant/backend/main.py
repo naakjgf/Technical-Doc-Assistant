@@ -66,7 +66,7 @@ try:
         redis_client = redis.Redis(host=local_redis_host, port=local_redis_port, decode_responses=True)
         print("Successfully connected to local Redis.")
 
-    redis_client.ping()
+    ##redis_client.ping()
 
 except redis.exceptions.ConnectionError as e:
     print(f"FATAL: Could not connect to Redis: {e}")
