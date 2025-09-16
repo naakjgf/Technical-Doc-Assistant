@@ -21,8 +21,9 @@ def load_github_repo(repo_url: str, local_path: str = "temp_repo") -> List[dict]
         shutil.rmtree(local_path)
     
     try:
-        print(f"Attempting to clone repository from {repo_url} with depth=1...", flush=True)
-        Repo.clone_from(repo_url, local_path, depth=1)
+        print(f"Attempting to clone repository from {repo_url}...", flush=True)
+        #Repo.clone_from(repo_url, local_path, depth=1)
+        Repo.clone_from(repo_url, local_path)
         print("--- CLONE SUCCEEDED ---", flush=True)
         
         documents = []
